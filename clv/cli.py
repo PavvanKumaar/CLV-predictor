@@ -44,6 +44,18 @@ def main():
     training = commands.add_parser("train")
     for name in ["train-cutoff", "validation-cutoff", "test-cutoff", "observation-end"]:
         training.add_argument(f"--{name}", required=True)
+    full = commands.add_parser("train-all", help="Run classifier, count, value and combined CLV")
+    for name in ["train-cutoff", "validation-cutoff", "test-cutoff", "observation-end"]:
+        full.add_argument(f"--{name}", required=True)
+    full.add_argument("--classifier-calibration", choices=["none", "sigmoid"], default="sigmoid")
+    full.add_argument("--count-calibration", choices=["none", "scalar"], default="none")
+    full.add_argument("--cold-prior-strength", type=float, default=50)
+    full.add_argument("--cold-buckets", type=int, choices=[2, 4], default=2)
+    full.add_argument("--calibration", choices=["none", "scalar", "isotonic"], default="none")
+    full.add_argument("--cap-quantile", type=float, default=None, help="Validation revenue percentile for cap (0, 1]")
+    full.add_argument("--no-revenue-cap", action="store_true")
+    full.add_argument("--established-calibration", choices=["none", "scalar", "isotonic"], default="none")
+    full.add_argument("--shared-calibration", action="store_true", help="Fit one validation calibrator instead of separate history cohorts")
     commands.add_parser("demo")
     args = parser.parse_args()
     if args.command == "init-db":
@@ -80,8 +92,17 @@ def main():
                 labels.to_csv(target / "labels.csv", index=False)
                 result = {"snapshot_id": identity, "customers": len(frame), "output": str(target.resolve())}
             else:
-                from clv.ml import train
-                result = train(db, args.train_cutoff, args.validation_cutoff, args.test_cutoff, args.observation_end, os.getenv("ARTIFACT_DIR", "artifacts"))
+                from clv.ml import train, train_full
+                operation = train_full if args.command == "train-all" else train
+                options = {} if args.command == "train" else {
+                    "calibration_method": args.calibration,
+                    "classifier_calibration": args.classifier_calibration,
+                    "count_calibration": args.count_calibration,
+                    "cold_prior_strength": args.cold_prior_strength, "cold_buckets": args.cold_buckets,
+                    "established_calibration": args.established_calibration,
+                    "cap_quantile": None if args.no_revenue_cap else args.cap_quantile,
+                    "separate_cohorts": not args.shared_calibration}
+                result = operation(db, args.train_cutoff, args.validation_cutoff, args.test_cutoff, args.observation_end, os.getenv("ARTIFACT_DIR", "artifacts"), **options)
     print(json.dumps(result, indent=2))
 
 

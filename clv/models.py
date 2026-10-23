@@ -85,6 +85,11 @@ class ModelRun(Base):
     status: Mapped[str] = mapped_column(String(32))
     classifier_type: Mapped[str | None] = mapped_column(String(64))
     classifier_auc: Mapped[float | None] = mapped_column(Float)
+    count_regressor_type: Mapped[str | None] = mapped_column(String(64))
+    count_regressor_rmse: Mapped[float | None] = mapped_column(Float)
+    value_regressor_type: Mapped[str | None] = mapped_column(String(64))
+    value_regressor_rmse: Mapped[float | None] = mapped_column(Float)
+    combined_rmse: Mapped[float | None] = mapped_column(Float)
     metadata_json: Mapped[dict] = mapped_column(JSON)
     artifact_path: Mapped[str] = mapped_column(String(1024))
 

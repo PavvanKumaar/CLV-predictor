@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clv-predictor"
+version = "0.1.0"
+description = "Reproducible customer purchase propensity pipeline"
+requires-python = ">=3.12"
+dependencies = ["pandas", "numpy", "scikit-learn", "SQLAlchemy", "alembic", "fastapi", "uvicorn", "pydantic-settings", "psycopg[binary]", "matplotlib", "joblib", "python-dotenv", "APScheduler"]
+
+[project.optional-dependencies]
+models = ["lightgbm", "catboost", "xgboost", "statsmodels"]
+dev = ["pytest", "httpx"]
+
+[project.scripts]
+clv = "clv.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["clv*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

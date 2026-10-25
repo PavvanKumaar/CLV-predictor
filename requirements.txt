@@ -1,0 +1,14 @@
+alembic==1.20.1
+APScheduler==3.11.3
+fastapi==0.161.1
+uvicorn==0.54.0
+pydantic-settings==2.16.1
+pydantic==2.14.1
+psycopg[binary]==3.3.6
+SQLAlchemy==2.1.6
+matplotlib==3.11.2
+joblib==1.6.0
+python-dotenv==1.2.4
+pandas==3.1.0
+numpy==2.5.4
+scikit-learn==1.9.1

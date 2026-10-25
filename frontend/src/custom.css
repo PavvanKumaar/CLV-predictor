@@ -1,0 +1,84 @@
+/* Custom CSS to style CLV UI components */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.cards article {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-top: 4px solid #6366f1; /* indigo-600 */
+  border-left: 1px solid #e5e7eb; /* gray-200 */
+}
+
+.cards article label {
+  display: block;
+  font-size: 0.875rem;
+  color: #6b7280; /* gray-500 */
+  margin-bottom: 0.25rem;
+}
+
+.cards article strong {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827; /* gray-800 */
+}
+
+.panel {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 1.5rem;
+}
+
+.panel h2 {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  text-align: left;
+  padding: 0.5rem;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+tbody td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+nav button {
+  background-color: #6366f1;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  margin-right: 0.5rem;
+  border: none;
+  cursor: pointer;
+}
+
+nav button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+nav span {
+  margin: 0 0.5rem;
+}

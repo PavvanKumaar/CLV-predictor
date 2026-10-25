@@ -8,3 +8,13 @@ artifacts/
 *.db
 frontend/node_modules/
 frontend/dist/
+.venv*/
+*.whl
+# Build and temporary files
+dist/
+coverage/
+*.log
+.DS_Store
+.vscode/
+
+scratch/

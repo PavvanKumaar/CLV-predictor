@@ -1,0 +1,26 @@
+/* Fallback Tailwind utility classes */
+.bg-white { background-color: #fff; }
+.bg-gray-100 { background-color: #f3f4f6; }
+.grid { display: grid; }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gap-4 { gap: 1rem; }
+.rounded-lg { border-radius: 0.5rem; }
+.shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.p-4 { padding: 1rem; }
+.p-2 { padding: 0.5rem; }
+.text-sm { font-size: 0.875rem; }
+.text-gray-500 { color: #6b7280; }
+.text-2xl { font-size: 1.5rem; }
+.font-semibold { font-weight: 600; }
+.text-gray-800 { color: #111827; }
+.min-h-screen { min-height: 100vh; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.overflow-auto { overflow: auto; }
+.border { border: 1px solid; }
+.border-t { border-top: 1px solid; }
+.border-l-4 { border-left: 4px solid; }
+.border-indigo-600 { border-color: #6366f1; }
+.hover\:underline:hover { text-decoration: underline; }

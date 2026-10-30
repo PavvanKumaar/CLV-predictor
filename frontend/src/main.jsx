@@ -35,6 +35,7 @@ import {
   Cell
 } from 'recharts';
 import './index.css';
+import { baselineComparisons, revenueInference } from './evaluation.js';
 
 const API = '/api';
 const money = value =>
@@ -65,6 +66,8 @@ async function request(path) {
   return body;
 }
 
+const predictionSegments = ['VIP', 'Growth', 'At-Risk', 'Low-Priority'];
+
 function listFrom(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;
@@ -72,6 +75,23 @@ function listFrom(data) {
   if (Array.isArray(data?.predictions)) return data.predictions;
   if (Array.isArray(data?.customers)) return data.customers;
   return [];
+}
+
+async function requestAll(path, pageSize = 500) {
+  const records = [];
+  let offset = 0;
+
+  while (true) {
+    const separator = path.includes('?') ? '&' : '?';
+    const page = listFrom(
+      await request(`${path}${separator}limit=${pageSize}&offset=${offset}`)
+    );
+
+    records.push(...page);
+    if (page.length < pageSize) return records;
+
+    offset += pageSize;
+  }
 }
 
 function normalizeCustomer(row) {
@@ -101,28 +121,70 @@ function useData() {
   async function refresh() {
     setLoading(true);
     const results = await Promise.allSettled([
-      request('/customers?limit=500'),
-      request('/clv/predictions?limit=500'),
+      requestAll('/customers'),
+      ...predictionSegments.map(segment =>
+        requestAll(`/clv/predictions?segment=${encodeURIComponent(segment)}`)
+      ),
       request('/clv/summary'),
-      request('/model/status')
+      request('/model/status'),
+      request('/model/metrics')
     ]);
 
     const next = { customers: [], predictions: [], summary: null, model: null };
     const messages = [];
 
-    results.forEach((result, index) => {
-      const keys = ['customers', 'predictions', 'summary', 'model'];
+    const [customersResult, ...predictionAndMetadataResults] = results;
+    const predictionResults = predictionAndMetadataResults.slice(
+      0,
+      predictionSegments.length
+    );
+    const [summaryResult, modelResult, metricsResult] =
+      predictionAndMetadataResults.slice(predictionSegments.length);
 
-      if (result.status === 'fulfilled') {
-        if (index === 0 || index === 1) {
-          next[keys[index]] = listFrom(result.value).map(normalizeCustomer);
-        } else {
-          next[keys[index]] = result.value;
-        }
-      } else {
-        messages.push(`${keys[index]}: ${result.reason?.message || 'Request failed'}`);
+    if (customersResult.status === 'fulfilled') {
+      next.customers = customersResult.value.map(normalizeCustomer);
+    } else {
+      messages.push(`customers: ${customersResult.reason?.message || 'Request failed'}`);
+    }
+
+    next.predictions = predictionResults
+      .filter(result => result.status === 'fulfilled')
+      .flatMap(result => result.value)
+      .map(normalizeCustomer)
+      .filter((prediction, index, allPredictions) => {
+        const key = `${prediction.model_version}-${prediction.customer_id}`;
+        return allPredictions.findIndex(candidate =>
+          `${candidate.model_version}-${candidate.customer_id}` === key
+        ) === index;
+      });
+
+    predictionResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        messages.push(
+          `${predictionSegments[index]} predictions: ${
+            result.reason?.message || 'Request failed'
+          }`
+        );
       }
     });
+
+    if (summaryResult.status === 'fulfilled') {
+      next.summary = summaryResult.value;
+    } else {
+      messages.push(`summary: ${summaryResult.reason?.message || 'Request failed'}`);
+    }
+
+    if (modelResult.status === 'fulfilled') {
+      next.model = modelResult.value;
+    } else {
+      messages.push(`model: ${modelResult.reason?.message || 'Request failed'}`);
+    }
+
+    if (metricsResult.status === 'fulfilled') {
+      next.evaluation = metricsResult.value;
+    } else {
+      next.evaluationError = metricsResult.reason?.message || 'Evaluation request failed';
+    }
 
     setData(next);
     setErrors(messages);
@@ -555,6 +617,62 @@ function AnalyticsPage({ data, loading }) {
   );
 }
 
+function EvaluationInsights({ report }) {
+  const format = value => Number.isFinite(value) ? value.toFixed(4) : 'Not available';
+  return (
+    <>
+      <h4>What the results mean</h4>
+      <div className="info-banner">{revenueInference(report.combined)}</div>
+      <h4>Baseline vs selected models</h4>
+      <p>Same-artifact validation comparisons before final calibration. Lower error is better.
+        These measure model selection performance; final test scores appear below.</p>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Stage / metric</th><th scope="col">Baseline</th><th scope="col">Selected model</th><th scope="col">Interpretation</th></tr></thead>
+          <tbody>{baselineComparisons(report).map(row => (
+            <tr key={row.stage}>
+              <th scope="row">{row.stage}<br />{row.label}</th>
+              <td>{row.baselineName}<br />{format(row.base)}</td>
+              <td>{row.winner || 'Not available'}<br />{format(row.actual)}</td>
+              <td style={{ whiteSpace: 'normal', minWidth: 220 }}>{row.inference}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <p>Baseline: constant purchase probability for stage 1; training-mean predictions for stages 2 and 3.
+        Stage 1 includes cold-start customers; stages 2 and 3 evaluate established purchasers.</p>
+      <p>Baseline test scores and a combined CLV baseline are not stored in this artifact,
+        so test-set improvement over a baseline cannot be determined.</p>
+    </>
+  );
+}
+
+function EvaluationMetrics({ report }) {
+  const groups = [
+    ['Combined CLV', report.combined, [['rmse', 'RMSE'], ['mae', 'MAE'], ['aggregate_error_pct', 'Aggregate error (%)']]],
+    ['Purchase probability', report.test, [['roc_auc', 'ROC-AUC'], ['pr_auc', 'PR-AUC'], ['brier', 'Brier score'], ['precision_at_0_5', 'Precision at 0.5'], ['recall_at_0_5', 'Recall at 0.5']]],
+    ['Transaction count', report.stage2?.test, [['rmse', 'RMSE'], ['mae', 'MAE']]],
+    ['Order value', report.stage3?.test, [['rmse', 'RMSE'], ['mae', 'MAE']]]
+  ];
+  return groups.map(([title, scores, fields]) => (
+    <div key={title}>
+      <h4>{title} &middot; Test set{Number.isFinite(scores?.n) ? ` \u00b7 ${number(scores.n)} customers` : ''}</h4>
+      {(title === 'Transaction count' || title === 'Order value') && (
+        <p>{(title === 'Transaction count' ? report.stage2 : report.stage3)?.evaluation_population}</p>
+      )}
+      <div className="model-details">
+        {fields.map(([key, label]) => (
+          <div key={key}><span>{label}</span><strong>
+            {typeof scores?.[key] === 'number' && Number.isFinite(scores[key])
+              ? scores[key].toFixed(key.includes('auc') || key === 'brier' ? 4 : 2)
+              : 'Not available'}
+          </strong></div>
+        ))}
+      </div>
+    </div>
+  ));
+}
+
 function ModelPerformancePage({ data, loading }) {
   const model = data.model || {};
   const summary = data.summary || {};
@@ -581,14 +699,18 @@ function ModelPerformancePage({ data, loading }) {
       </section>
       <section className="panel">
         <h3>Evaluation metrics</h3>
-        <p>
-          This frontend does not assume model accuracy. ROC-AUC, Brier score, MAE,
-          RMSE, and other evaluation metrics will appear here only when the backend
-          exposes verified evaluation results.
-        </p>
-        <div className="info-banner">
-          Prediction volume and predicted CLV are operational metrics, not measures of model accuracy.
-        </div>
+        {loading ? <EmptyState loading /> : data.evaluation ? (
+          <>
+            <p>Latest completed artifact: <strong>{data.evaluation.model_version}</strong></p>
+            <p>Historical 90-day test evaluation. Errors use the source data's monetary units.</p>
+            {model.model_version && model.model_version !== data.evaluation.model_version && (
+              <div className="info-banner">The latest completed artifact differs from the model status shown above.</div>
+            )}
+            <EvaluationInsights report={data.evaluation} />
+            <EvaluationMetrics report={data.evaluation} />
+          </>
+        ) : <div role="status" className="info-banner">{data.evaluationError || 'No evaluation metrics available.'}</div>}
+
       </section>
     </>
   );

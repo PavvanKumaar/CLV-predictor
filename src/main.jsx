@@ -88,25 +88,45 @@ async function request(path) {
 }
 
 async function loadAllData() {
+  const segmentRequests = [
+    ['VIP', '/clv/predictions?segment=VIP&limit=125'],
+    ['Growth', '/clv/predictions?segment=Growth&limit=125'],
+    ['At-Risk', '/clv/predictions?segment=At-Risk&limit=125'],
+    ['Low-Priority', '/clv/predictions?segment=Low-Priority&limit=125']
+  ];
+
   const results = await Promise.allSettled([
     request('/customers?limit=500&offset=0'),
-    request('/clv/predictions?limit=500&offset=0'),
+    ...segmentRequests.map(([, path]) => request(path)),
     request('/clv/summary'),
     request('/model/status'),
     request('/stage1/predictions?limit=500&offset=0')
   ]);
 
-  const [customersResult, predictionsResult, summaryResult, modelResult, stage1Result] =
-    results;
+  const [customersResult, ...predictionAndMetadataResults] = results;
+  const predictionResults = predictionAndMetadataResults.slice(
+    0,
+    segmentRequests.length
+  );
+  const [summaryResult, modelResult, stage1Result] =
+    predictionAndMetadataResults.slice(segmentRequests.length);
+
+  const predictions = predictionResults
+    .filter(result => result.status === 'fulfilled')
+    .flatMap(result => unwrap(result.value))
+    .filter((prediction, index, allPredictions) => {
+      const key = `${prediction.model_version}-${prediction.customer_id}`;
+      return allPredictions.findIndex(candidate =>
+        `${candidate.model_version}-${candidate.customer_id}` === key
+      ) === index;
+    });
 
   return {
     customers: customersResult.status === 'fulfilled'
       ? unwrap(customersResult.value)
       : [],
 
-    predictions: predictionsResult.status === 'fulfilled'
-      ? unwrap(predictionsResult.value)
-      : [],
+    predictions,
 
     summary: summaryResult.status === 'fulfilled'
       ? summaryResult.value
@@ -125,7 +145,7 @@ async function loadAllData() {
         result,
         label: [
           'Customers',
-          'CLV predictions',
+          ...segmentRequests.map(([segment]) => `${segment} predictions`),
           'CLV summary',
           'Model status',
           'Purchase predictions'

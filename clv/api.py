@@ -1,3 +1,7 @@
+import json
+import os
+from pathlib import Path
+
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -134,6 +138,29 @@ def get_model_status(db=Depends(database)):
                 result[key] = serialize_value(value)
 
     return result
+
+
+@app.get("/model/metrics")
+def get_model_metrics():
+    """Read evaluation results from the newest completed full-model artifact."""
+    root = Path(os.getenv("ARTIFACT_DIR", "artifacts"))
+    if not root.is_absolute():
+        root = Path(__file__).resolve().parents[1] / root
+    candidates = list(root.glob("*/full_model.joblib"))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No completed model artifact found.")
+    bundle = max(candidates, key=lambda path: (path.stat().st_mtime_ns, path.parent.name))
+    try:
+        report = json.loads((bundle.parent / "metrics.json").read_text(encoding="utf-8"))
+        if not isinstance(report, dict) or report.get("model_version") != bundle.parent.name:
+            raise ValueError("Artifact version mismatch")
+        # Validate JSON numbers before returning the report to the browser.
+        json.dumps(report, allow_nan=False)
+    except (OSError, ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="Latest model artifact evaluation metrics are unavailable.")
+    return {key: report[key] for key in (
+        "model_version", "winner", "validation", "test", "stage2", "stage3", "combined", "cutoffs"
+    ) if key in report}
 
 
 # ---------------------------------------------------------
